@@ -6,5 +6,6 @@ email-validator>=2.1
 pyjwt>=2.8
 psycopg2-binary>=2.9   # PostgreSQL driver (production, PostGIS)
 httpx>=0.27
+python-dotenv>=1.0
 pytest>=8.0
 python-multipart>=0.0.9

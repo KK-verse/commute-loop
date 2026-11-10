@@ -126,7 +126,9 @@ def commute_requests(_: User = Depends(admin_only), db: Session = Depends(get_db
     for r in db.scalars(select(CommuteRequest).order_by(CommuteRequest.created_at.desc()).limit(200)):
         u, home, office = db.get(User, r.commuter_id), db.get(SavedLocation, r.home_location_id), \
             db.get(SavedLocation, r.office_location_id)
-        out.append({"id": r.id, "commuter": u.full_name, "home": home.label, "office": office.label,
+        out.append({"id": r.id, "created_at": r.created_at.isoformat(), "commuter": u.full_name,
+                    "home": home.label, "home_address": home.address,
+                    "office": office.label, "office_address": office.address,
                     "arrival_deadline": r.arrival_deadline.strftime("%H:%M"),
                     "evening": r.evening_departure_time.strftime("%H:%M") if r.evening_departure_time else None,
                     "days": r.travel_days, "vehicle": r.preferred_vehicle, "max_extra_minutes": r.max_extra_minutes,

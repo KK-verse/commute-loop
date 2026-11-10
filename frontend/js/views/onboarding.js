@@ -1,5 +1,6 @@
 import { api, session } from "../api.js";
 import { $, $$, DAYS, html, icon, logo, schematicMap, simBadge } from "../ui.js";
+import { drawGooglePoint, drawGoogleRoute, mountPlaceSearch } from "../maps.js";
 
 // Illustrative places so the flow works before a maps key is configured. Coordinates are approximate
 // and are saved with geocode_source = "demo", never presented as geocoded addresses.
@@ -25,12 +26,16 @@ const val = (v) => (v == null ? "" : v);
 function locationPicker(prefix, city, loc, label, config) {
   const places = PLACES[city] || [];
   const l = loc || {};
-  const preview = l.latitude != null ? schematicMap([{ lat: l.latitude, lng: l.longitude, label: l.label }], { height: 200, caption: "Schematic preview" }) : "";
+  const preview = l.latitude != null && !config.maps?.browser_key ? schematicMap([{ lat: l.latitude, lng: l.longitude, label: l.label }], { height: 200, caption: "Illustrative location preview" }) : "";
   return html`<div class="stack" data-loc="${prefix}">
+    ${config.maps?.places_live ? html`<label class="field"><span class="lbl">Search with Google Maps</span><div class="google-place-search" data-place-search></div>
+      <span class="hint">Google receives the place search so it can return matching locations.</span></label>` : ""}
     <label class="field"><span class="lbl">Choose a place</span>
       <select name="${prefix}_preset"><option value="">Enter details manually</option>
       ${places.map((p, i) => html`<option value="${i}" ${l.label === p[0] ? "selected" : ""}>${p[0]}</option>`)}</select>
-      <span class="hint">${config.maps?.live ? "" : "Address search turns on when a maps key is added on the server. Until then, pick an illustrative place or enter the details yourself."}</span></label>
+      <span class="hint">${config.maps?.places_live ? "Or use an illustrative area or enter the details yourself." : "Google address search turns on when a browser key is configured. Until then, these areas are illustrative; enter and confirm your own details."}</span></label>
+    <input type="hidden" name="${prefix}_place_id" value="${val(l.place_id)}">
+    <input type="hidden" name="${prefix}_source" value="${val(l.geocode_source || "manual")}">
     <div class="grid2">
       <label class="field"><span class="lbl">Place name</span><input type="text" name="${prefix}_label" required value="${val(l.label)}"></label>
       <label class="field"><span class="lbl">Address</span><input type="text" name="${prefix}_address" required value="${val(l.address)}"></label>
@@ -41,23 +46,24 @@ function locationPicker(prefix, city, loc, label, config) {
     </div>
     <label class="field"><span class="lbl">Preferred pickup point</span><input type="text" name="${prefix}_pickup" placeholder="e.g. Main gate, bus stop opposite the mall" value="${val(l.pickup_label)}"><span class="hint">A safe, easy spot where a vehicle can stop.</span></label>
     <div data-preview="${prefix}">${preview}</div>
+    ${config.maps?.browser_key ? html`<div class="google-map" data-google-map aria-label="Google Maps location preview"></div><div class="small muted" data-map-message></div>` : ""}
+    ${prefix === "office" ? html`<div class="route-preview" data-route-preview aria-live="polite"><div class="small muted">Choose both places to preview the road route.</div></div>` : ""}
     <label class="check"><input type="checkbox" name="${prefix}_confirmed" ${l.confirmed ? "checked" : ""}><span><strong>This is the right spot</strong><br><span class="small muted">I've checked the location and pickup point.</span></span></label>
   </div>`;
 }
 
-function readLocation(form, prefix, source) {
+function readLocation(form, prefix) {
   const g = (n) => form.elements[`${prefix}_${n}`];
   const lat = parseFloat(g("lat").value), lng = parseFloat(g("lng").value);
   if (!g("label").value.trim() || !g("address").value.trim()) return { error: "Add a place name and address." };
   if (Number.isNaN(lat) || Number.isNaN(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return { error: "Enter valid latitude and longitude." };
   if (!g("confirmed").checked) return { error: "Please confirm the location is correct." };
-  const preset = g("preset").value !== "";
   return { value: { label: g("label").value.trim(), address: g("address").value.trim(), latitude: lat, longitude: lng,
     pickup_label: g("pickup").value.trim() || null, pickup_latitude: lat, pickup_longitude: lng, confirmed: true,
-    geocode_source: preset ? "demo" : "manual", place_id: null } };
+    geocode_source: g("source").value || "manual", place_id: g("place_id").value || null } };
 }
 
-function wirePicker(form, city) {
+function wirePickerLegacy(form, city) {
   $$("[data-loc]", form).forEach((box) => {
     const prefix = box.dataset.loc;
     const g = (n) => form.elements[`${prefix}_${n}`];
@@ -75,10 +81,115 @@ function wirePicker(form, city) {
   });
 }
 
+function wirePicker(form, city, config, routeOrigin = null) {
+  const cleanups = [];
+  form.querySelectorAll("[data-loc]").forEach((box) => {
+    const prefix = box.dataset.loc;
+    const g = (name) => form.elements[`${prefix}_${name}`];
+    const canvas = box.querySelector("[data-google-map]");
+    const routeBox = box.querySelector("[data-route-preview]");
+    const showStatus = (message) => {
+      const messageBox = box.querySelector("[data-map-message]");
+      if (messageBox) messageBox.textContent = message;
+      if (routeBox) {
+        routeBox.replaceChildren();
+        const text = document.createElement("div");
+        text.className = "small muted";
+        text.textContent = message;
+        routeBox.append(text);
+      }
+    };
+    let routeTimer, routeSequence = 0, pointSignature = "";
+    cleanups.push(() => { clearTimeout(routeTimer); routeSequence++; });
+    const coords = () => ({ latitude: parseFloat(g("lat").value), longitude: parseFloat(g("lng").value) });
+    const valid = (p) => Number.isFinite(p.latitude) && Number.isFinite(p.longitude);
+    const updatePoint = () => {
+      const point = coords();
+      if (!canvas || !config.maps?.browser_key || !valid(point)) return;
+      const signature = `${point.latitude}:${point.longitude}:${g("label").value}`;
+      if (signature === pointSignature) return;
+      pointSignature = signature;
+      drawGooglePoint(canvas, { ...point, label: g("label").value }, config.maps.browser_key).catch((e) => showStatus(e.message));
+    };
+    const updateRoute = () => {
+      if (!routeBox || !routeOrigin) return;
+      const destination = coords();
+      if (!valid(destination)) { clearTimeout(routeTimer); routeSequence++; showStatus("Choose both places to preview the road route."); return; }
+      if (!config.maps?.routes_live) {
+        showStatus("Google road routing is not configured yet. Your saved commute still appears in your account and the admin request list.");
+        updatePoint();
+        return;
+      }
+      clearTimeout(routeTimer);
+      routeSequence++;
+      showStatus("Calculating a Google road route…");
+      const sequence = ++routeSequence;
+      routeTimer = setTimeout(async () => {
+        try {
+          const result = await api("/maps/route", { method: "POST", body: {
+            origin: { latitude: routeOrigin.latitude, longitude: routeOrigin.longitude }, destination,
+          } });
+          if (!box.isConnected || sequence !== routeSequence) return;
+          const km = (result.distance_meters / 1000).toLocaleString("en-IN", { maximumFractionDigits: 1 });
+          const minutes = Math.max(1, Math.round(result.duration_seconds / 60));
+          routeBox.innerHTML = `<div class="route-stats"><strong>${km} km</strong><strong>~${minutes} min</strong><span>Google road route · current traffic estimate</span></div>`;
+          const messageBox = box.querySelector("[data-map-message]");
+          if (messageBox) messageBox.textContent = "";
+          if (canvas && config.maps?.browser_key) {
+            drawGoogleRoute(canvas, result, routeOrigin, destination, config.maps.browser_key)
+              .catch((e) => showStatus(e.message));
+          }
+        } catch (e) {
+          if (box.isConnected && sequence === routeSequence) showStatus(e.message);
+        }
+      }, 450);
+    };
+    const redraw = () => {
+      const point = coords();
+      const fallback = box.querySelector(`[data-preview=${prefix}]`);
+      if (fallback) fallback.innerHTML = !config.maps?.browser_key && valid(point)
+        ? schematicMap([{ lat: point.latitude, lng: point.longitude, label: g("label").value }], { height: 200, caption: "Illustrative location preview" }).s
+        : "";
+      updatePoint();
+      updateRoute();
+    };
+    g("preset").addEventListener("change", () => {
+      const place = PLACES[city]?.[g("preset").value];
+      g("place_id").value = "";
+      if (!place) { g("source").value = "manual"; return; }
+      g("source").value = "demo";
+      g("label").value = place[0]; g("address").value = place[1];
+      g("lat").value = place[2]; g("lng").value = place[3];
+      g("confirmed").checked = false; pointSignature = ""; redraw();
+    });
+    ["lat", "lng", "label", "address"].forEach((name) => g(name).addEventListener("input", () => {
+      g("source").value = "manual"; g("place_id").value = ""; g("confirmed").checked = false;
+    }));
+    ["lat", "lng", "label"].forEach((name) => g(name).addEventListener("change", redraw));
+    const search = box.querySelector("[data-place-search]");
+    if (search && config.maps?.browser_key) {
+      mountPlaceSearch(search, { apiKey: config.maps.browser_key, city,
+        onSelect: (place) => {
+          g("label").value = place.label; g("address").value = place.address;
+          g("lat").value = place.latitude; g("lng").value = place.longitude;
+          g("place_id").value = place.place_id || ""; g("source").value = "google";
+          g("preset").value = ""; g("confirmed").checked = false; pointSignature = ""; redraw();
+        },
+        onError: (error) => showStatus(error.message),
+      }).catch((error) => showStatus(error.message));
+    }
+    redraw();
+  });
+  return () => cleanups.forEach((cleanup) => cleanup());
+}
+
 /* ------------------------------------------------------------------ wizard engine */
 function wizard(root, { title, intro, steps, state, submit, edit }) {
   let i = 0;
+  let stepCleanup = null;
   const paint = (error = "") => {
+    stepCleanup?.();
+    stepCleanup = null;
     const s = steps[i];
     root.innerHTML = html`<main class="wizard" id="main">
       <div class="row spread">${logo()}${edit ? html`<a class="link small" href="${state._back}" data-link>Cancel</a>` : ""}</div>
@@ -90,7 +201,7 @@ function wizard(root, { title, intro, steps, state, submit, edit }) {
         <div class="row spread" style="padding-top:8px">${i ? html`<button type="button" class="btn ghost" id="back">Back</button>` : html`<span></span>`}
         <button class="btn" id="next">${i === steps.length - 1 ? (edit ? "Save changes" : "Save and continue") : "Next"}</button></div></form></main>`.s;
     const form = $("#wf");
-    s.wire?.(form, state);
+    stepCleanup = s.wire?.(form, state) || null;
     $("#back")?.addEventListener("click", () => { s.collect(form, state, true); i--; paint(); });
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -125,11 +236,11 @@ async function commuterFlow(root, me, config, onDone, edit) {
         <label class="field"><span class="lbl">City</span><select name="city">${CITIES.map((c) => html`<option ${c === s.city ? "selected" : ""}>${c}</option>`)}</select></label>`,
       collect: (f, s, soft) => { s.full_name = f.name.value.trim(); s.email = f.email.value.trim(); s.city = f.city.value; if (!soft && s.full_name.length < 2) return "Enter your full name."; } },
     { title: "Where you start", sub: "Your home and the spot where you'd like to be picked up.",
-      render: (s) => locationPicker("home", s.city, s.home, "Home", config), wire: (f, s) => wirePicker(f, s.city),
+      render: (s) => locationPicker("home", s.city, s.home, "Home", config), wire: (f, s) => wirePicker(f, s.city, config),
       collect: (f, s, soft) => { const r = readLocation(f, "home"); if (r.error) return soft ? null : r.error; s.home = r.value; } },
     { title: "Where you work", sub: "Your office and where you'd like to be dropped.",
       render: (s) => html`<label class="field"><span class="lbl">Company or office name</span><input type="text" name="company" required value="${s.company_name}"></label>${locationPicker("office", s.city, s.office, "Office", config)}`,
-      wire: (f, s) => wirePicker(f, s.city),
+      wire: (f, s) => wirePicker(f, s.city, config, s.home),
       collect: (f, s, soft) => { s.company_name = f.company.value.trim(); const r = readLocation(f, "office"); if (soft) return; if (s.company_name.length < 2) return "Enter your company name."; if (r.error) return r.error; s.office = r.value; } },
     { title: "Your schedule", sub: "Morning and evening can differ. We create a separate trip for each travel day.",
       render: (s) => html`<div class="grid2"><label class="field"><span class="lbl">Reach the office by</span><input type="time" name="arr" required value="${s.arrival_time}"><span class="hint">Your latest acceptable arrival.</span></label>

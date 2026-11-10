@@ -80,9 +80,12 @@ function match(table, path) {
 
 let renderToken = 0;
 let disposeLanding = null;
+let disposeRoute = null;
 async function render() {
   disposeLanding?.();
   disposeLanding = null;
+  disposeRoute?.();
+  disposeRoute = null;
   const my = ++renderToken;
   const path = location.pathname.replace(/\/+$/, "") || "/";
   const user = session.user;
@@ -131,7 +134,7 @@ async function render() {
     if (my !== renderToken) return;
     const host = $("#main");
     host.innerHTML = out.html.s;
-    if (out.mount) out.mount(host, () => render());
+    if (out.mount) disposeRoute = out.mount(host, () => render()) || null;
     document.title = `${out.title || "CommuteLoop"} · CommuteLoop`;
   } catch (e) {
     if (my !== renderToken) return;

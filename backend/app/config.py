@@ -8,6 +8,15 @@ def _bool(name: str, default: bool) -> bool:
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+# Load a local project-root .env for direct uvicorn runs. Docker Compose also
+# reads this file; environment variables already provided by the host win.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(BASE_DIR.parent / ".env", override=False)
+except ImportError:
+    pass
+
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'commuteloop.db'}")
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-only-secret-change-me-dev-only-secret")
 JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "12"))
@@ -17,7 +26,11 @@ OTP_MAX_ATTEMPTS = 5
 DEMO_MODE = _bool("DEMO_MODE", True)
 ADMIN_PHONE = os.getenv("ADMIN_PHONE", "+919000000000")
 ADMIN_NAME = os.getenv("ADMIN_NAME", "CommuteLoop Admin")
-MAPS_PROVIDER = os.getenv("MAPS_PROVIDER", "none").lower()
-HAS_MAPS_KEY = bool(os.getenv("GOOGLE_MAPS_API_KEY") or os.getenv("MAPBOX_ACCESS_TOKEN")) and MAPS_PROVIDER != "none"
+MAPS_PROVIDER = os.getenv("MAPS_PROVIDER", "google").lower()
+GOOGLE_MAPS_BROWSER_KEY = os.getenv("GOOGLE_MAPS_BROWSER_KEY") or os.getenv("GOOGLE_MAPS_API_KEY", "")
+GOOGLE_ROUTES_API_KEY = os.getenv("GOOGLE_ROUTES_API_KEY", "")
+HAS_PLACES_KEY = bool(GOOGLE_MAPS_BROWSER_KEY) and MAPS_PROVIDER == "google"
+HAS_ROUTES_KEY = bool(GOOGLE_ROUTES_API_KEY) and MAPS_PROVIDER == "google"
+HAS_MAPS_KEY = HAS_PLACES_KEY or HAS_ROUTES_KEY
 DOCUMENT_STORAGE_DIR = Path(os.getenv("DOCUMENT_STORAGE_DIR", str(BASE_DIR / "private_documents")))
 FRONTEND_DIR = Path(os.getenv("FRONTEND_DIR", str(BASE_DIR.parent / "frontend")))

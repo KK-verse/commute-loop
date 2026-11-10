@@ -15,6 +15,26 @@ cd backend && pip install -r requirements.txt
 uvicorn app.main:app --port 8000        # open http://localhost:8000
 python -m pytest tests -q
 ```
+
+## Google Maps for local commute booking
+Google Places autocomplete and Google Routes road previews are wired into commuter setup. Google returns the selected
+place name, address, place ID and coordinates; the existing onboarding API saves them to `saved_locations` and
+`commute_requests`, and the admin Requests page reads from those same records. A route is only labelled live when
+the Routes API responds. Without keys, illustrative places and manual entry still work and no ETA is shown.
+
+1. In Google Cloud Console, create a project, enable billing, and enable **Maps JavaScript API**, **Places API (New)**,
+   and **Routes API**.
+2. Create a browser key restricted to **Maps JavaScript API** and **Places API (New)**, with HTTP referrers
+   `http://localhost:8000/*` and `http://127.0.0.1:8000/*`.
+3. Create a second key restricted to **Routes API**. Keep this server key private; do not put it in frontend code or
+   GitHub. For a deployed server, add an appropriate server-side restriction too.
+4. Copy `.env.example` to `.env` in the project root and set `GOOGLE_MAPS_BROWSER_KEY` and
+   `GOOGLE_ROUTES_API_KEY`. Restart the backend after changing it.
+
+The browser key is public to the browser and therefore must have referrer and API restrictions. The Routes key is
+read only by FastAPI. Both are omitted from Git by `.gitignore`; `/api/config` returns the restricted browser key
+only when configured and never returns the Routes key.
+
 ## Run with PostgreSQL + PostGIS
 ```
 cp .env.example .env && docker compose up --build
@@ -35,9 +55,8 @@ This demonstration is deliberately labelled **simulated**: the repository has no
 Sign in with the development admin number `9000000000`; test mode displays the OTP in the login flow. Then open **Technology Demo** in the admin sidebar.
 
 ## Not built yet (reported honestly)
-- Production matching engine, live route optimisation, production scoring and explainability panel (Phase 4). The judge demonstration uses a separate simulated graph and is not used for live matches.
-- Google Places / Mapbox autocomplete, geocoding and road routing: needs API keys. Until then locations are picked from
-  illustrative places or entered manually, maps are schematic, and nothing shows a fake road route or ETA.
+- Production matching engine, multi-rider live route optimisation, production scoring and explainability panel (Phase 4). The judge demonstration uses a separate simulated graph and is not used for live matches.
+- Live Google Places search and road-route preview are implemented but need the two restricted keys described above. Until configured, locations can be entered manually or chosen from clearly labelled illustrative areas.
 - FCM push (notifications are stored in-app only), real SMS, payments, live GPS and trip start/complete, SOS,
   admin document viewer (uploads are stored privately; no public URL), reassignment tooling, reports.
 - React Native client (web/PWA used instead; APIs are client-agnostic).

@@ -66,6 +66,13 @@ svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-widt
 .field > span.lbl { display: block; font-weight: 600; font-size: .9rem; margin-bottom: 6px; }
 .field .hint { display: block; font-size: .82rem; color: var(--ink-soft); margin-top: 5px; }
 .field .err { display: block; font-size: .85rem; color: var(--red); margin-top: 5px; }
+.google-place-search { min-height: 48px; }
+.google-place-search gmp-place-autocomplete { width: 100%; --gmpx-color-surface: var(--white); --gmpx-color-on-surface: var(--ink); }
+.google-map { width: 100%; min-height: 230px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--r); background: #edf3f2; }
+.route-preview { display: grid; gap: 10px; }
+.route-stats { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r); background: #f7faf8; }
+.route-stats strong { font-size: 1.05rem; color: var(--navy); }
+.route-stats span { flex-basis: 100%; font-size: .8rem; color: var(--ink-soft); }
 input[type=text], input[type=tel], input[type=email], input[type=time], input[type=date], input[type=number], select, textarea {
   width: 100%; min-height: 46px; padding: 10px 14px; background: var(--white); border: 1.5px solid var(--line-strong); border-radius: 12px; transition: border-color .15s, box-shadow .15s; }
 textarea { min-height: 96px; resize: vertical; }

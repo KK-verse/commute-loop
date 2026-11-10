@@ -1,5 +1,6 @@
 import { api } from "../api.js";
 import { $, $$, DAYS, confirmDialog, dayList, fmtDate, fmtTime, html, inr, schematicMap, simBadge, statusBadge, toast } from "../ui.js";
+import { drawGoogleRoute } from "../maps.js";
 
 export const commuterNav = [
   { href: "/app", label: "Home", icon: "home", primary: true },
@@ -48,16 +49,37 @@ async function home(me) {
 }
 
 /* ------------------------------------------------------------------ My Commute */
-async function commute() {
+async function commute(_me, config) {
   const p = await api("/commuter/profile");
   const stops = [p.home && { lat: p.home.latitude, lng: p.home.longitude, label: "Home" }, p.office && { lat: p.office.latitude, lng: p.office.longitude, label: "Office" }].filter(Boolean);
+  let route = null, routeError = "";
+  if (config.maps?.routes_live && p.home && p.office) {
+    try {
+      route = await api("/maps/route", { method: "POST", body: {
+        origin: { latitude: p.home.latitude, longitude: p.home.longitude },
+        destination: { latitude: p.office.latitude, longitude: p.office.longitude },
+      } });
+    } catch (e) { routeError = e.message; }
+  }
   const row = (k, v) => html`<div class="row spread" style="padding:10px 0;border-bottom:1px solid var(--line)"><span class="muted">${k}</span><strong style="text-align:right">${v}</strong></div>`;
+  const km = route ? (route.distance_meters / 1000).toLocaleString("en-IN", { maximumFractionDigits: 1 }) : null;
+  const minutes = route ? Math.max(1, Math.round(route.duration_seconds / 60)) : null;
+  const map = route && config.maps?.browser_key
+    ? html`<div class="google-map" data-commute-google-map aria-label="Google Maps commute route"></div>`
+    : route ? html`<div class="card small muted">Google road route calculated. Add a browser key to show the map.</div>`
+    : html`${schematicMap(stops, { caption: "Schematic, not a road route" })}<p class="small muted">${routeError || (config.maps?.routes_live ? "Live road route unavailable right now; this location sketch is illustrative." : "Google road routes are not connected yet. This location sketch is illustrative and has no route or ETA.")}</p>`;
   return { title: "My Commute", html: html`${head("My Commute", "The journey we plan rides around.")}
     <div class="cols"><div class="stack"><div class="card"><h3>Route</h3>${row("Home", p.home?.label || "–")}${row("Pickup point", p.home?.pickup_label || "–")}${row("Office", `${p.company_name || ""} · ${p.office?.label || "–"}`)}${row("Drop-off point", p.office?.pickup_label || "–")}</div>
       <div class="card"><h3>Timing and days</h3>${row("Reach the office by", fmtTime(p.arrival_time))}${row("Leave the office at", p.departure_time ? fmtTime(p.departure_time) : "No return ride")}${row("Travel days", dayList(p.working_days))}</div>
       <div class="card"><h3>Preferences</h3>${row("Vehicle", p.preferred_vehicle === "any" ? "Any available" : p.preferred_vehicle)}${row("Extra travel time allowed", `${p.max_extra_minutes} min`)}${row("Same driver and group", p.prefers_fixed_group ? "Preferred" : "Not needed")}${row("Other compatible matches", p.accepts_alternative_matches ? "Welcome" : "No")}</div>
       <a class="btn" href="/onboarding?edit=1" data-link>Edit my commute</a></div>
-    <div class="stack">${schematicMap(stops, { caption: "Schematic, not a road route" })}<p class="small muted">Road distance and travel time come from a routing service once a maps key is configured. Until then they are not shown, rather than guessed.</p></div></div>` };
+    <div class="stack">${map}${route ? html`<div class="route-stats"><strong>${km} km</strong><strong>~${minutes} min</strong><span>Google road route · current traffic estimate, not a booked-trip ETA</span></div>` : ""}</div></div>`,
+    mount: (host) => {
+      if (route && config.maps?.browser_key) {
+        const canvas = host.querySelector("[data-commute-google-map]");
+        drawGoogleRoute(canvas, route, p.home, p.office, config.maps.browser_key).catch(() => {});
+      }
+    } };
 }
 
 /* ------------------------------------------------------------------ Find a match */

@@ -36,6 +36,16 @@ class LocationIn(BaseModel):
     geocode_source: Literal["google", "mapbox", "manual", "demo"] = "manual"
 
 
+class RoutePointIn(BaseModel):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+
+class RoutePreviewIn(BaseModel):
+    origin: RoutePointIn
+    destination: RoutePointIn
+
+
 class CommuterOnboardingIn(BaseModel):
     full_name: str = Field(min_length=2, max_length=120)
     email: EmailStr | None = None

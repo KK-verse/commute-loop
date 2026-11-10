@@ -10,7 +10,7 @@ from . import config
 from .database import SessionLocal, get_db, init_db
 from .demo import seed_demo
 from .models import Role, User
-from .routers import admin, auth, commuter, driver, matches, meta, technology_demo
+from .routers import admin, auth, commuter, driver, maps, matches, meta, technology_demo
 from .security import normalise_phone, require_role
 
 
@@ -29,7 +29,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="CommuteLoop API", version="0.1.0", lifespan=lifespan)
-for r in (meta.router, auth.router, commuter.router, driver.router, admin.router, matches.router, technology_demo.router):
+for r in (meta.router, auth.router, commuter.router, driver.router, maps.router, admin.router, matches.router, technology_demo.router):
     app.include_router(r)
 
 
