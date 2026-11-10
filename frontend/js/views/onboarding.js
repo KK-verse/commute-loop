@@ -184,7 +184,7 @@ function wirePicker(form, city, config, routeOrigin = null) {
 }
 
 /* ------------------------------------------------------------------ wizard engine */
-function wizard(root, { title, intro, steps, state, submit, edit }) {
+function wizard(root, { title, intro, steps, state, submit, edit, booking = false }) {
   let i = 0;
   let stepCleanup = null;
   const paint = (error = "") => {
@@ -193,13 +193,13 @@ function wizard(root, { title, intro, steps, state, submit, edit }) {
     const s = steps[i];
     root.innerHTML = html`<main class="wizard" id="main">
       <div class="row spread">${logo()}${edit ? html`<a class="link small" href="${state._back}" data-link>Cancel</a>` : ""}</div>
-      <h1 style="margin-top:26px;font-size:clamp(1.6rem,3.4vw,2.1rem)">${edit ? "Edit your details" : title}</h1>
-      <p class="muted" style="margin-top:6px">${edit ? "Changes apply to future trips." : intro}</p>
+      <h1 style="margin-top:26px;font-size:clamp(1.6rem,3.4vw,2.1rem)">${booking ? "Book your commute" : edit ? "Edit your details" : title}</h1>
+      <p class="muted" style="margin-top:6px">${booking ? "Request recurring rides to work. Choose your pickup, destination, travel days and vehicle." : edit ? "Changes apply to future trips." : intro}</p>
       <div class="steps" role="img" aria-label="Step ${i + 1} of ${steps.length}">${steps.map((_, k) => html`<i class="${k < i ? "on" : k === i ? "now" : ""}"></i>`)}</div>
       <form id="wf" class="card stack" novalidate><h2 style="font-size:1.35rem">${s.title}</h2>${s.sub ? html`<p class="muted small" style="margin-top:-6px">${s.sub}</p>` : ""}${s.render(state)}
         ${error ? html`<div class="notice red" role="alert">${error}</div>` : ""}
         <div class="row spread" style="padding-top:8px">${i ? html`<button type="button" class="btn ghost" id="back">Back</button>` : html`<span></span>`}
-        <button class="btn" id="next">${i === steps.length - 1 ? (edit ? "Save changes" : "Save and continue") : "Next"}</button></div></form></main>`.s;
+        <button class="btn" id="next">${i === steps.length - 1 ? (booking ? "Save commute booking" : edit ? "Save changes" : "Save and continue") : "Next"}</button></div></form></main>`.s;
     const form = $("#wf");
     stepCleanup = s.wire?.(form, state) || null;
     $("#back")?.addEventListener("click", () => { s.collect(form, state, true); i--; paint(); });
@@ -218,7 +218,7 @@ function wizard(root, { title, intro, steps, state, submit, edit }) {
 }
 
 /* ------------------------------------------------------------------ commuter */
-async function commuterFlow(root, me, config, onDone, edit) {
+async function commuterFlow(root, me, config, onDone, edit, booking = false) {
   const p = edit ? await api("/commuter/profile").catch(() => ({})) : {};
   const s = {
     _back: "/app/commute", full_name: p.full_name || me.full_name, email: p.email || "", city: p.city || "Bengaluru",
@@ -256,14 +256,14 @@ async function commuterFlow(root, me, config, onDone, edit) {
       collect: (f, s, soft) => { s.arrival_time = f.arr.value; s.no_return = f.noret.checked; s.departure_time = s.no_return ? null : f.dep.value || null; s.working_days = $$("input[name=days]:checked", f).map((c) => +c.value); s.start_date = f.start.value;
         if (soft) return; if (!s.arrival_time) return "Choose your office arrival time."; if (!s.no_return && !s.departure_time) return "Choose a return time or tick 'I don't need a return ride'."; if (!s.working_days.length) return "Choose at least one travel day."; } },
     { title: "Ride preferences", sub: "These limits are hard rules: we won't propose a ride that breaks them.",
-      render: (s) => html`<label class="field"><span class="lbl">Preferred vehicle</span><select name="veh">${[["any", "Any available"], ["auto", "Auto-rickshaw"], ["taxi", "Taxi"], ["bike", "Bike"]].map(([v, l]) => html`<option value="${v}" ${s.preferred_vehicle === v ? "selected" : ""}>${l}</option>`)}</select></label>
+      render: (s) => html`<label class="field"><span class="lbl">Preferred vehicle</span><select name="veh">${[["any", "Any available"], ["auto", "Auto-rickshaw"], ["taxi", "Cab / taxi"], ["bike", "Bike"]].map(([v, l]) => html`<option value="${v}" ${s.preferred_vehicle === v ? "selected" : ""}>${l}</option>`)}</select></label>
         <label class="field"><span class="lbl">Most extra travel time you'll accept: <output id="dv">${s.max_extra_minutes}</output> min</span><input class="range" type="range" name="detour" min="0" max="60" step="5" value="${s.max_extra_minutes}"><span class="hint">Extra time compared with travelling alone on the same route.</span></label>
         <label class="check"><input type="checkbox" name="fixed" ${s.prefers_fixed_group ? "checked" : ""}><span><strong>I prefer the same driver and group</strong><br><span class="small muted">We'll try to keep you together.</span></span></label>
         <label class="check"><input type="checkbox" name="alt" ${s.accepts_alternative_matches ? "checked" : ""}><span><strong>Suggest other compatible matches</strong><br><span class="small muted">If my usual ride isn't available.</span></span></label>`,
       wire: (f) => f.detour.addEventListener("input", () => { $("#dv").textContent = f.detour.value; }),
       collect: (f, s) => { s.preferred_vehicle = f.veh.value; s.max_extra_minutes = +f.detour.value; s.prefers_fixed_group = f.fixed.checked; s.accepts_alternative_matches = f.alt.checked; } },
   ];
-  wizard(root, { title: "Set up your commute", intro: "A few details so we can plan a ride that fits your day.", steps, state: s, edit,
+  wizard(root, { title: "Set up your commute", intro: "A few details so we can plan a ride that fits your day.", steps, state: s, edit, booking,
     submit: async (s) => {
       await api("/commuter/onboarding", { method: "PUT", body: { full_name: s.full_name, email: s.email || null, company_name: s.company_name, city: s.city, home: s.home, office: s.office,
         arrival_time: s.arrival_time, departure_time: s.departure_time, working_days: s.working_days, preferred_vehicle: s.preferred_vehicle, max_extra_minutes: s.max_extra_minutes,
@@ -317,7 +317,8 @@ async function driverFlow(root, me, config, onDone, edit) {
     } });
 }
 
-export function onboarding(root, me, config, onDone) {
-  const edit = new URLSearchParams(location.search).get("edit") === "1";
-  (me.role === "driver" ? driverFlow : commuterFlow)(root, me, config, onDone, edit);
+export function onboarding(root, me, config, onDone, options = {}) {
+  const edit = new URLSearchParams(location.search).get("edit") === "1" || !!options.booking;
+  if (me.role === "driver") driverFlow(root, me, config, onDone, edit);
+  else commuterFlow(root, me, config, onDone, edit, !!options.booking);
 }

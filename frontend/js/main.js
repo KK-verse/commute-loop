@@ -117,6 +117,11 @@ async function render() {
     onboarding(app, me, config, (u) => { toast("Saved."); go(HOME[u.role], true); });
     return;
   }
+  if (path === "/app/book") {
+    if (me.role !== "commuter") { go(HOME[me.role], true); return; }
+    onboarding(app, me, config, (u) => { toast("Commute booking saved."); go(HOME[u.role], true); }, { booking: true });
+    return;
+  }
   const area = path.split("/")[1];
   if (!["app", "driver", "admin"].includes(area)) { app.innerHTML = notFound().s; return; }
   if (HOME[me.role].slice(1) !== area) {

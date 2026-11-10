@@ -4,10 +4,11 @@ import { drawGoogleRoute } from "../maps.js";
 
 export const commuterNav = [
   { href: "/app", label: "Home", icon: "home", primary: true },
+  { href: "/app/book", label: "Book a commute", short: "Book", icon: "route", primary: true },
   { href: "/app/commute", label: "My Commute", short: "Commute", icon: "route" },
   { href: "/app/match", label: "Find a Match", short: "Match", icon: "search", primary: true },
   { href: "/app/trips", label: "Upcoming Trips", short: "Trips", icon: "list", primary: true },
-  { href: "/app/schedule", label: "Recurring Schedule", short: "Schedule", icon: "calendar", primary: true },
+  { href: "/app/schedule", label: "Recurring Schedule", short: "Schedule", icon: "calendar" },
   { href: "/app/fares", label: "Fare and Savings", icon: "wallet" },
   { href: "/app/profile", label: "Profile", icon: "user" },
   { href: "/app/safety", label: "Safety and Support", icon: "shield" },
@@ -27,7 +28,7 @@ const stopList = (stops) => html`<ol class="route">${stops.map((s) => html`<li><
 async function home(me) {
   const d = await api("/commuter/dashboard");
   if (!d.onboarding_complete) {
-    return { title: "Home", html: html`${head(`Hello, ${me.full_name.split(" ")[0]}`)}<div class="card empty"><h3>Set up your commute</h3><p>Add your home, office and travel days to start.</p><a class="btn" href="/onboarding" data-link>Set up my commute</a></div>` };
+    return { title: "Home", html: html`${head(`Hello, ${me.full_name.split(" ")[0]}`)}<div class="card empty"><h3>Ready to book your commute?</h3><p>Add your pickup, office destination and travel days to request recurring rides.</p><a class="btn" href="/app/book" data-link>Book a commute</a></div>` };
   }
   const t = d.next_trip;
   const trip = t ? html`<div class="card">
@@ -43,6 +44,7 @@ async function home(me) {
       ${d.pending_proposal ? html`<div class="notice green" style="margin-top:16px"><span>A ride is waiting for your answer.</span><a class="link" href="/app/match" data-link>Review it</a></div>` : ""}</div>`
     : html`<div class="card empty"><h3>No upcoming trips</h3><p>Your recurring plan has no travel days in the next two weeks.</p><a class="btn" href="/app/schedule" data-link>Review my schedule</a></div>`;
   return { title: "Home", html: html`${head(`Hello, ${me.full_name.split(" ")[0]}`, "Here's your next commute and this week's plan.")}
+    <div class="row wrap" style="margin-bottom:18px"><a class="btn" href="/app/book" data-link>Book a commute</a><a class="btn ghost" href="/app/commute" data-link>View my commute</a></div>
     <div class="stack">${trip}
     <div class="card"><div class="row spread" style="margin-bottom:14px"><h3>This week</h3><a class="link small" href="/app/schedule" data-link>Manage schedule</a></div>${weekStrip(d.week)}</div>
     <details class="small muted"><summary style="cursor:pointer">Where these numbers come from</summary><p style="margin-top:8px">Next trip and week: ${d.data_sources.next_trip}. Driver, pickup times and fare: ${d.data_sources.driver_and_fare}. Fares marked simulated use an assumed tariff, not a live quote.</p></details></div>` };

@@ -36,8 +36,8 @@ const weights = [
 ];
 
 export function landing(user, config = {}) {
-  const appHref = user ? (user.role === "driver" ? "/driver" : user.role === "admin" ? "/admin" : "/app") : "/register";
-  const appLabel = user ? "Open your app" : "Find my commute";
+  const appHref = user ? (user.role === "driver" ? "/driver" : user.role === "admin" ? "/admin" : "/app/book") : "/register";
+  const appLabel = user?.role === "commuter" || !user ? "Book a commute" : "Open your app";
   const demoHref = user?.role === "admin" ? "/admin/technology-demo" : "#technology";
   const demoLabel = user?.role === "admin" ? "Open technology demo" : "Explore the matching logic";
   const mapStatus = config.maps?.live
