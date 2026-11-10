@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: commuteloop
+      POSTGRES_PASSWORD: commuteloop
+      POSTGRES_DB: commuteloop
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+  api:
+    build: ./backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://commuteloop:commuteloop@db:5432/commuteloop
+    depends_on: [db]
+    ports: ["8000:8000"]
+    volumes: ["./frontend:/app/frontend:ro", "docs_private:/app/private_documents"]
+  worker:
+    build: ./backend
+    command: python -m app.worker
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://commuteloop:commuteloop@db:5432/commuteloop
+    depends_on: [db]
+volumes:
+  pgdata:
+  docs_private:
